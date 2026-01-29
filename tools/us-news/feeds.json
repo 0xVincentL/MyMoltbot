@@ -45,9 +45,9 @@
     },
 
     {
-      "name": "Investopedia — News",
-      "url": "https://www.investopedia.com/rss/news.xml",
-      "tags": ["us", "markets", "macro"]
+      "name": "Seeking Alpha — Market News (RSS)",
+      "url": "https://seekingalpha.com/market-news.xml",
+      "tags": ["us", "markets", "macro", "seekingalpha"]
     }
   ]
 }

@@ -6,7 +6,8 @@
   "description": "US macro + US stock market news aggregator (RSS)",
   "scripts": {
     "update": "node src/update.js",
-    "digest": "node src/digest.js"
+    "digest": "node src/digest.js",
+    "report": "node src/report.js"
   },
   "dependencies": {
     "rss-parser": "^3.13.0"

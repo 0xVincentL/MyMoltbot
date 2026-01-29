@@ -1,0 +1,53 @@
+{
+  "defaultLookbackHours": 24,
+  "feeds": [
+    {
+      "name": "Federal Reserve — Press Releases",
+      "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+      "tags": ["us", "fed", "rates", "macro"]
+    },
+    {
+      "name": "US Treasury — Press Releases",
+      "url": "https://home.treasury.gov/news/press-releases?format=rss",
+      "tags": ["us", "treasury", "macro"]
+    },
+    {
+      "name": "BLS — Latest Releases",
+      "url": "https://www.bls.gov/feed/bls_latest.rss",
+      "tags": ["us", "bls", "jobs", "inflation", "macro"]
+    },
+    {
+      "name": "BEA — News",
+      "url": "https://www.bea.gov/rss/rss.xml",
+      "tags": ["us", "bea", "gdp", "macro"]
+    },
+
+    {
+      "name": "SEC — Press Releases",
+      "url": "https://www.sec.gov/news/pressreleases.rss",
+      "tags": ["us", "sec", "markets"]
+    },
+
+    {
+      "name": "CNBC — Top News",
+      "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+      "tags": ["us", "markets", "equities"]
+    },
+    {
+      "name": "CNBC — Economy",
+      "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+      "tags": ["us", "macro"]
+    },
+    {
+      "name": "CNBC — Markets",
+      "url": "https://www.cnbc.com/id/15839069/device/rss/rss.html",
+      "tags": ["us", "markets", "equities"]
+    },
+
+    {
+      "name": "Investopedia — News",
+      "url": "https://www.investopedia.com/rss/news.xml",
+      "tags": ["us", "markets", "macro"]
+    }
+  ]
+}

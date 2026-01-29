@@ -86,6 +86,19 @@ const lines = [];
 lines.push(`# 市场要闻 Top ${limit}（最近 ${hours}h · UTC）`);
 lines.push('');
 lines.push(`更新：${store.lastRunAt} · 新增条目：${newCount}`);
+
+// If the agent / Codespace was down, cron jobs won't run. We can't notify *during* downtime,
+// but we can flag the next time we are alive.
+if (store.lastRunAt) {
+  const last = Date.parse(store.lastRunAt);
+  if (Number.isFinite(last)) {
+    const deltaH = (Date.now() - last) / 3600e3;
+    if (deltaH > 30) {
+      lines.push(`⚠️ 检测到上次成功运行距今约 ${deltaH.toFixed(1)} 小时：期间可能因服务/页面不在线而错过定时推送。`);
+    }
+  }
+}
+
 lines.push('');
 
 if (!top.length) {

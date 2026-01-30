@@ -83,7 +83,7 @@ items.sort((a, b) => (Date.parse(b.iso || b.fetchedAt) - Date.parse(a.iso || a.f
 const top = items.slice(0, limit);
 
 const lines = [];
-lines.push(`# 市场要闻 Top ${limit}（最近 ${hours}h · UTC）`);
+lines.push(`# 市场情报 Top ${limit}（最近 ${hours}h · UTC）`);
 lines.push('');
 lines.push(`更新：${store.lastRunAt} · 新增条目：${newCount}`);
 

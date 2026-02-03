@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi-Agent Trading System Demo (v0.2)</title>
+  <style>
+    :root{--bg:#070b10;--panel:#0c1220;--panel2:#0a0f18;--line:#1a273a;--muted:#93a7bb;--text:#eaf2fb;--accent:#6ee7ff;
+      --ok:#76ff9b;--warn:#ffcc66;--bad:#ff6b6b;--chip:#101a2b;--shadow:0 20px 50px rgba(0,0,0,.35)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:radial-gradient(1200px 700px at 20% 0%, #0b1630 0%, var(--bg) 45%); color:var(--text)}
+    header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px; position:sticky;top:0;background:rgba(7,11,16,.9);backdrop-filter: blur(10px); z-index:10}
+    header .left{display:flex;flex-direction:column;gap:3px}
+    header h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.2px}
+    header .sub{font-size:12px;color:var(--muted)}
+    header .right{display:flex;align-items:center;gap:10px}
+
+    main{padding:16px 18px; display:grid; grid-template-columns: 320px 1fr; gap:14px;}
+    .card{background:linear-gradient(180deg, rgba(16,26,43,.85), rgba(10,15,24,.85)); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow: var(--shadow)}
+    .card.flat{box-shadow:none}
+
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .col{display:flex;flex-direction:column;gap:10px}
+
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    select, button{width:100%;padding:10px 10px;border-radius:10px;border:1px solid #28405f;background:#0a111c;color:var(--text)}
+    button{cursor:pointer;background:linear-gradient(135deg,#0e1a2b,#122a45);border-color:#33557a;font-weight:800}
+    button:hover{border-color:#4b79aa}
+
+    .chip{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border-radius:999px;background:var(--chip);border:1px solid #22344d;font-size:12px;color:var(--muted)}
+    .dot{width:9px;height:9px;border-radius:50%}
+    .dot.ok{background:var(--ok)}
+    .dot.warn{background:var(--warn)}
+    .dot.bad{background:var(--bad)}
+
+    .metric{display:flex;flex-direction:column;gap:6px}
+    .metric .k{font-size:12px;color:var(--muted)}
+    .metric .v{font-size:18px;font-weight:900}
+
+    .grid2{display:grid;grid-template-columns: 1fr 1fr; gap:12px}
+
+    .chart{height:240px;border-radius:12px;border:1px solid var(--line);background:radial-gradient(900px 500px at 50% 0%, rgba(110,231,255,.09) 0%, rgba(0,0,0,0) 60%), linear-gradient(180deg, rgba(8,12,18,.8), rgba(8,12,18,.6)); position:relative; overflow:hidden}
+    canvas{width:100%;height:100%}
+    .chart .overlay{position:absolute;left:12px;top:10px;display:flex;gap:10px;flex-wrap:wrap}
+
+    .gauge{height:10px;border-radius:999px;background:#0b1220;border:1px solid var(--line);overflow:hidden}
+    .gauge > div{height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--ok))}
+
+    .section-title{font-size:12px;color:var(--muted);font-weight:800;letter-spacing:.2px;margin:0 0 8px 0}
+
+    .timeline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .seg{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;border:1px solid #22344d;background:#0a111c;font-size:12px;color:var(--muted)}
+    .seg b{color:var(--text)}
+
+    details{border:1px solid var(--line);border-radius:12px;background:rgba(10,15,24,.6)}
+    summary{cursor:pointer;list-style:none;padding:12px 14px; font-size:12px; color:var(--muted); display:flex;justify-content:space-between;align-items:center}
+    summary::-webkit-details-marker{display:none}
+    pre{margin:0;padding:12px 14px;border-top:1px solid var(--line); background:rgba(8,12,18,.75); font-size:12px; line-height:1.35; white-space:pre-wrap; word-break:break-word}
+
+    a{color:var(--accent)}
+    .small{font-size:12px;color:var(--muted)}
+
+    @media (max-width: 980px){
+      main{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <h1>Multi-Agent Trading System Demo <span class="small">v0.2</span></h1>
+      <div class="sub">TradingView-style UI (default) · JSON bus hidden behind a Debug toggle · mock data only</div>
+    </div>
+    <div class="right">
+      <span class="chip"><span class="dot warn"></span>Demo mode: no execution, no funds</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left control panel -->
+    <section class="card">
+      <div class="row" style="margin-bottom:10px">
+        <div class="chip" id="stateChip"><span class="dot warn" id="stateDot"></span><span id="stateText">State: —</span></div>
+        <div class="chip"><span class="dot" style="background:#6ee7ff"></span><span id="confText">Conf: —</span></div>
+      </div>
+
+      <div>
+        <label for="symbol">Symbol</label>
+        <select id="symbol">
+          <option value="TOKEN_X">TOKEN_X</option>
+          <option value="TOKEN_Y">TOKEN_Y</option>
+          <option value="MEME_A">MEME_A</option>
+          <option value="MEME_B">MEME_B</option>
+        </select>
+      </div>
+
+      <div style="margin-top:10px">
+        <button id="run">Run pipeline</button>
+      </div>
+
+      <div style="margin-top:14px" class="col">
+        <div class="metric">
+          <div class="k">Signal Score</div>
+          <div class="v"><span id="score">—</span> <span class="small">/ 100</span></div>
+          <div class="gauge" aria-label="signal-score"><div id="scoreBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="metric">
+          <div class="k">Action</div>
+          <div class="v" id="action">—</div>
+          <div class="small" id="risk">—</div>
+        </div>
+
+        <div>
+          <div class="section-title">Why (top reasons)</div>
+          <div class="timeline" id="reasons"></div>
+        </div>
+
+        <div>
+          <div class="section-title">Last 24h regime mix</div>
+          <div class="timeline" id="mix"></div>
+        </div>
+
+        <div class="small">
+          Principle: decide <b>if</b> it’s tradable (state) before any directional bias.
+        </div>
+      </div>
+    </section>
+
+    <!-- Right main view -->
+    <section class="col">
+      <section class="card">
+        <div class="row" style="margin-bottom:10px">
+          <div>
+            <div class="section-title">Price/Activity (mock)</div>
+            <div class="small">A quick visual to mimic TradingView; will be replaced by real OHLCV + on-chain overlays.</div>
+          </div>
+          <div class="chip"><span class="dot" style="background:#6ee7ff"></span><span id="timeWindow">Window: 24h</span></div>
+        </div>
+        <div class="chart">
+          <canvas id="cv" width="1200" height="500"></canvas>
+          <div class="overlay">
+            <span class="chip"><span class="dot" style="background:#6ee7ff"></span><span id="sym">—</span></span>
+            <span class="chip"><span class="dot" style="background:#9aa6b2"></span><span id="vol">Vol× —</span></span>
+            <span class="chip"><span class="dot" style="background:#9aa6b2"></span><span id="tc">Trades× —</span></span>
+            <span class="chip"><span class="dot" style="background:#9aa6b2"></span><span id="sm">Smart $ —</span></span>
+            <span class="chip"><span class="dot" style="background:#9aa6b2"></span><span id="top">Top10 —h</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid2">
+        <section class="card">
+          <div class="section-title">Decision Ladder</div>
+          <div class="timeline">
+            <div class="seg"><b>Regime</b> → <span id="ladderReg">—</span></div>
+            <div class="seg"><b>Quality</b> → <span id="ladderQ">—</span></div>
+            <div class="seg"><b>Action</b> → <span id="ladderA">—</span></div>
+          </div>
+          <div class="small" style="margin-top:10px">
+            Hard constraints enforced: non-Active ⇒ no trade.
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-title">Tracking (Journal)</div>
+          <div class="small">When execution exists, this is where 1h/4h/24h performance + review labels go.</div>
+          <div style="margin-top:10px" class="timeline">
+            <div class="seg"><b>Entry state</b>: <span id="trkState">—</span></div>
+            <div class="seg"><b>Entry score</b>: <span id="trkScore">—</span></div>
+            <div class="seg"><b>Review</b>: Demo-only</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="card flat">
+        <details>
+          <summary>
+            <span>Debug: show 5-agent JSON bus (Agent01→05)</span>
+            <span class="small">(for auditing + integration)</span>
+          </summary>
+          <pre id="debug"></pre>
+        </details>
+      </section>
+    </section>
+  </main>
+
+<script>
+  function seedFromString(str) {
+    let h = 2166136261;
+    for (let i=0;i<str.length;i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function xorshift32(seed){
+    let x = seed >>> 0;
+    return function(){
+      x ^= x << 13; x >>>= 0;
+      x ^= x >> 17; x >>>= 0;
+      x ^= x << 5;  x >>>= 0;
+      return (x >>> 0) / 4294967296;
+    };
+  }
+  function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
+  function round(x, d=2){ const p = Math.pow(10,d); return Math.round(x*p)/p; }
+  function pretty(obj){ return JSON.stringify(obj, null, 2); }
+
+  function agent01_info(symbol, time_window){
+    const hour = new Date().toISOString().slice(0,13);
+    const rand = xorshift32(seedFromString(symbol + '|' + hour + '|' + time_window));
+
+    const volume_change = round(clamp((rand()*3.2), 0, 3.2), 2);
+    const trade_count_change = round(clamp((rand()*3.2), 0, 3.2), 2);
+    const wallet_activity_change = round(clamp((rand()*1.6), 0, 1.6), 2);
+    const top_rank_duration_hours = Math.floor(rand()*60);
+
+    const large_order_detected = rand() > 0.55;
+    const smart_money_consistency = round(rand(), 2);
+
+    return {
+      symbol,
+      time_window,
+      features: {
+        volume_change,
+        trade_count_change,
+        large_order_detected,
+        wallet_activity_change,
+        top_rank_duration_hours,
+        smart_money_consistency
+      }
+    };
+  }
+
+  function agent02_regime(info){
+    const f = info.features;
+    const vol = f.volume_change;
+    const tc = f.trade_count_change;
+    const large = !!f.large_order_detected;
+    const sm = f.smart_money_consistency;
+
+    let market_state = 'No-Info';
+    let confidence = 0.55;
+
+    const sync = (Math.abs(vol - tc) <= 0.7);
+    const strong = (vol >= 1.6 && tc >= 1.6);
+    const top10 = (f.top_rank_duration_hours >= 24);
+
+    if (large && (vol >= 2.6 || tc >= 2.6) && !sync) {
+      market_state = 'Liquidity_Shock';
+      confidence = 0.72;
+    }
+
+    if (sync && strong && sm >= 0.6 && top10) {
+      market_state = 'Active';
+      confidence = 0.74;
+    }
+
+    if (sync && strong && (sm < 0.45 || f.top_rank_duration_hours < 12)) {
+      market_state = 'Information_Decay';
+      confidence = 0.66;
+    }
+
+    if ((tc >= 1.8 && vol < 1.1) || (sm < 0.35 && !large)) {
+      market_state = 'No-Info';
+      confidence = 0.78;
+    }
+
+    const states = ['Active','No-Info','Liquidity_Shock','Information_Decay'];
+    const base = {Active:6, 'No-Info':14, Liquidity_Shock:4, Information_Decay:0};
+    base[market_state] = clamp(base[market_state] + 2, 0, 24);
+    let total = states.reduce((s,k)=>s+base[k],0);
+    if (total !== 24) base['No-Info'] = clamp(base['No-Info'] + (24-total), 0, 24);
+    const state_duration_24h = {};
+    for (const k of states) state_duration_24h[k] = base[k] + 'h';
+
+    return { symbol: info.symbol, market_state, confidence: round(confidence,2), state_duration_24h };
+  }
+
+  function agent03_quality(info, regime){
+    const f = info.features;
+    let score = 0;
+    const reasons = [];
+    const vol = f.volume_change;
+    const tc = f.trade_count_change;
+    const topH = f.top_rank_duration_hours;
+    const sm = f.smart_money_consistency;
+
+    score += clamp((vol-1)*22, 0, 35);
+    score += clamp((tc-1)*22, 0, 35);
+    score += clamp((topH/48)*15, 0, 15);
+    score += clamp(sm*15, 0, 15);
+    if (f.large_order_detected) score += 5;
+
+    if (regime.market_state === 'Active') score += 10;
+    if (regime.market_state === 'No-Info') score -= 20;
+    if (regime.market_state === 'Liquidity_Shock') score -= 10;
+    if (regime.market_state === 'Information_Decay') score -= 8;
+
+    score = Math.round(clamp(score, 0, 100));
+
+    if (Math.abs(vol - tc) <= 0.7 && vol >= 1.4 && tc >= 1.4) reasons.push('volume 与 trade count 同步放大');
+    if (sm >= 0.6) reasons.push('聪明钱一致性较高');
+    if (topH >= 24) reasons.push('Top10 持续 >=24h');
+    if (f.large_order_detected) reasons.push('检测到大额单/异常成交');
+    reasons.push('市场状态：' + regime.market_state);
+
+    let quality_label = 'Low';
+    if (score >= 75) quality_label = 'High';
+    else if (score >= 55) quality_label = 'Medium';
+
+    return { symbol: info.symbol, signal_score: score, quality_label, reasons };
+  }
+
+  function agent04_decision(regime, quality){
+    const state = regime.market_state;
+    if (state !== 'Active') {
+      const map = {
+        'No-Info': {action:'AVOID', position_bias:'Neutral', risk_note:'Noise-dominant regime (No-Info). Strongly avoid.'},
+        'Liquidity_Shock': {action:'AVOID', position_bias:'Neutral', risk_note:'Liquidity/event shock. Do not trade; only interpret.'},
+        'Information_Decay': {action:'AVOID', position_bias:'Neutral', risk_note:'Information decaying; edge deteriorating.'}
+      };
+      const x = map[state] || {action:'AVOID', position_bias:'Neutral', risk_note:'Non-Active regime.'};
+      return { symbol: quality.symbol, action: x.action, position_bias: x.position_bias, risk_note: x.risk_note };
+    }
+
+    if (quality.quality_label === 'High') {
+      return { symbol: quality.symbol, action: 'WATCH', position_bias: 'Neutral', risk_note: 'Active + High quality. Watch for clean execution; don\'t force direction.' };
+    }
+    return { symbol: quality.symbol, action: 'AVOID', position_bias: 'Neutral', risk_note: 'Active but quality not high enough; avoid overtrading.' };
+  }
+
+  function agent05_tracking(regime, quality, decision){
+    return {
+      symbol: decision.symbol,
+      entry_context: { market_state: regime.market_state, signal_score: quality.signal_score, decision: decision.action },
+      post_trade_review: 'Demo mode: no trade executed. Add 1h/4h/24h outcomes when execution is integrated.'
+    };
+  }
+
+  function setDot(dotEl, kind){
+    dotEl.classList.remove('ok','warn','bad');
+    dotEl.classList.add(kind);
+  }
+
+  function renderUI(a1,a2,a3,a4,a5){
+    // header chips
+    document.getElementById('stateText').textContent = `State: ${a2.market_state}`;
+    document.getElementById('confText').textContent = `Conf: ${Math.round(a2.confidence*100)}%`;
+
+    const stateDot = document.getElementById('stateDot');
+    if (a2.market_state === 'Active') setDot(stateDot,'ok');
+    else if (a2.market_state === 'No-Info') setDot(stateDot,'bad');
+    else setDot(stateDot,'warn');
+
+    // score
+    document.getElementById('score').textContent = a3.signal_score;
+    document.getElementById('scoreBar').style.width = `${a3.signal_score}%`;
+
+    // action
+    document.getElementById('action').textContent = a4.action;
+    document.getElementById('risk').textContent = a4.risk_note;
+
+    // reasons
+    const reasons = document.getElementById('reasons');
+    reasons.innerHTML = '';
+    (a3.reasons || []).slice(0,4).forEach(r=>{
+      const el=document.createElement('div');
+      el.className='seg';
+      el.innerHTML = `<b>•</b> ${r}`;
+      reasons.appendChild(el);
+    });
+
+    // regime mix
+    const mix = document.getElementById('mix');
+    mix.innerHTML='';
+    const order=['Active','No-Info','Liquidity_Shock','Information_Decay'];
+    order.forEach(k=>{
+      const el=document.createElement('div');
+      el.className='seg';
+      el.innerHTML = `<b>${k}</b> ${a2.state_duration_24h[k] || '0h'}`;
+      mix.appendChild(el);
+    });
+
+    // ladder
+    document.getElementById('ladderReg').textContent = a2.market_state;
+    document.getElementById('ladderQ').textContent = `${a3.quality_label} (${a3.signal_score})`;
+    document.getElementById('ladderA').textContent = a4.action;
+
+    // tracking
+    document.getElementById('trkState').textContent = a5.entry_context.market_state;
+    document.getElementById('trkScore').textContent = a5.entry_context.signal_score;
+
+    // chart overlay
+    document.getElementById('sym').textContent = a1.symbol;
+    document.getElementById('vol').textContent = `Vol× ${a1.features.volume_change}`;
+    document.getElementById('tc').textContent = `Trades× ${a1.features.trade_count_change}`;
+    document.getElementById('sm').textContent = `Smart $ ${a1.features.smart_money_consistency}`;
+    document.getElementById('top').textContent = `Top10 ${a1.features.top_rank_duration_hours}h`;
+
+    // debug JSON
+    document.getElementById('debug').textContent =
+      "Agent01\n"+pretty(a1)+"\n\n"+
+      "Agent02\n"+pretty(a2)+"\n\n"+
+      "Agent03\n"+pretty(a3)+"\n\n"+
+      "Agent04\n"+pretty(a4)+"\n\n"+
+      "Agent05\n"+pretty(a5);
+  }
+
+  function drawChart(symbol, score){
+    const cv=document.getElementById('cv');
+    const ctx=cv.getContext('2d');
+    const w=cv.width, h=cv.height;
+    ctx.clearRect(0,0,w,h);
+
+    // background grid
+    ctx.strokeStyle='rgba(255,255,255,0.05)';
+    for(let x=0;x<w;x+=80){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for(let y=0;y<h;y+=60){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+    // seeded wave to mimic candles/line
+    const rand=xorshift32(seedFromString(symbol + '|' + score + '|' + new Date().toISOString().slice(0,10)));
+    const points=[];
+    let y=h*0.55;
+    for(let i=0;i<120;i++){
+      const drift=(score-50)/500;
+      y += (rand()-0.5)*18 + drift*12;
+      y = clamp(y, 40, h-40);
+      points.push({x: (i/119)*w, y});
+    }
+
+    // glow line
+    ctx.lineWidth=5;
+    ctx.strokeStyle='rgba(110,231,255,0.18)';
+    ctx.beginPath();
+    points.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+    ctx.stroke();
+
+    ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(110,231,255,0.85)';
+    ctx.beginPath();
+    points.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+    ctx.stroke();
+
+    // volume bars
+    const barW = w/120;
+    for(let i=0;i<120;i++){
+      const v = rand();
+      const bh = 20 + v*70;
+      ctx.fillStyle = `rgba(154,166,178,${0.08 + v*0.18})`;
+      ctx.fillRect(i*barW, h-bh, barW*0.7, bh);
+    }
+  }
+
+  function runPipeline(){
+    const symbol = document.getElementById('symbol').value;
+    const a1 = agent01_info(symbol, '24h');
+    const a2 = agent02_regime(a1);
+    const a3 = agent03_quality(a1, a2);
+    const a4 = agent04_decision(a2, a3);
+    const a5 = agent05_tracking(a2, a3, a4);
+
+    renderUI(a1,a2,a3,a4,a5);
+    drawChart(symbol, a3.signal_score);
+  }
+
+  document.getElementById('run').addEventListener('click', runPipeline);
+  runPipeline();
+</script>
+</body>
+</html>

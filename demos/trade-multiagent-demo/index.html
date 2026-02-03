@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi-Agent Trading System Demo (v0.1)</title>
+  <style>
+    :root{--bg:#0b0f14;--panel:#111826;--muted:#8aa0b5;--text:#e7eef6;--accent:#6ee7ff;--warn:#ffcc66;--bad:#ff6b6b;--ok:#76ff9b;}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--text);}
+    header{padding:16px 20px;border-bottom:1px solid #1f2a3a;display:flex;gap:12px;align-items:center;justify-content:space-between;}
+    header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px;}
+    header .sub{font-size:12px;color:var(--muted)}
+    main{padding:16px 20px; display:grid; grid-template-columns: 320px 1fr; gap:14px;}
+    .card{background:var(--panel); border:1px solid #1f2a3a; border-radius:10px; padding:14px;}
+    .controls label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+    select, button{width:100%;padding:10px 10px;border-radius:8px;border:1px solid #2a3a52;background:#0d1420;color:var(--text)}
+    button{cursor:pointer;background:linear-gradient(135deg,#0d1420,#13243b);border-color:#33557a;font-weight:600}
+    button:hover{border-color:#4b79aa}
+    .kpi{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .pill{padding:8px 10px;border-radius:999px;border:1px solid #2a3a52;background:#0d1420;font-size:12px}
+    .pill b{font-weight:700}
+    .pill.ok{border-color:rgba(118,255,155,.35)}
+    .pill.bad{border-color:rgba(255,107,107,.35)}
+    .pill.warn{border-color:rgba(255,204,102,.35)}
+    .layout-right{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .full{grid-column:1 / -1}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#0a0f18;border:1px solid #1f2a3a;border-radius:10px;padding:12px;font-size:12px;line-height:1.35}
+    .muted{color:var(--muted);font-size:12px}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .title{font-size:13px;font-weight:700;margin:0 0 8px 0}
+    .bar{height:10px;border-radius:999px;background:#0a0f18;border:1px solid #1f2a3a;overflow:hidden}
+    .bar > div{height:100%}
+    .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+    .dot{width:10px;height:10px;border-radius:50%}
+    a{color:var(--accent)}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Multi-Agent Trading System Demo <span class="sub">v0.1 (mock data · no execution)</span></h1>
+      <div class="sub">Principle: decide <b>whether</b> the market is tradable (state) before any directional bias.</div>
+    </div>
+    <div class="sub">Output is a 5-agent JSON pipeline (Info → Regime → Quality → Decision → Tracking).</div>
+  </header>
+
+  <main>
+    <section class="card controls">
+      <div class="row">
+        <div>
+          <label for="symbol">Symbol</label>
+          <select id="symbol">
+            <option value="TOKEN_X">TOKEN_X</option>
+            <option value="TOKEN_Y">TOKEN_Y</option>
+            <option value="MEME_A">MEME_A</option>
+            <option value="MEME_B">MEME_B</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:10px">
+        <button id="run">Run pipeline</button>
+      </div>
+
+      <div class="kpi" id="kpi"></div>
+      <div class="muted" style="margin-top:10px">
+        Notes:
+        <ul>
+          <li>No funds. No keys. No auto-trading.</li>
+          <li>All thresholds are placeholders in v0.1.</li>
+          <li>Designed for later integration with on-chain + microstructure sources.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="layout-right">
+      <div class="card">
+        <p class="title">Agent 01 — Information Intelligence</p>
+        <pre id="a1"></pre>
+      </div>
+      <div class="card">
+        <p class="title">Agent 02 — Market Regime</p>
+        <pre id="a2"></pre>
+      </div>
+      <div class="card">
+        <p class="title">Agent 03 — Signal Quality</p>
+        <pre id="a3"></pre>
+      </div>
+      <div class="card">
+        <p class="title">Agent 04 — Decision</p>
+        <pre id="a4"></pre>
+      </div>
+      <div class="card full">
+        <div class="row">
+          <p class="title" style="margin:0">Agent 05 — Execution & Tracking (demo = journal only)</p>
+          <span class="muted">Post-trade review is template output (no trades executed).</span>
+        </div>
+        <div style="margin-top:10px" class="row">
+          <div style="flex:1">
+            <pre id="a5"></pre>
+          </div>
+          <div style="width:320px">
+            <p class="title">State duration (last 24h)</p>
+            <div class="bar" aria-label="state-duration">
+              <div id="bar"></div>
+            </div>
+            <div class="legend" id="legend"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+  // Deterministic-ish PRNG (xorshift32) seeded by symbol + current hour.
+  function seedFromString(str) {
+    let h = 2166136261;
+    for (let i=0;i<str.length;i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function xorshift32(seed){
+    let x = seed >>> 0;
+    return function(){
+      x ^= x << 13; x >>>= 0;
+      x ^= x >> 17; x >>>= 0;
+      x ^= x << 5;  x >>>= 0;
+      return (x >>> 0) / 4294967296;
+    };
+  }
+
+  function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
+  function round(x, d=2){ const p = Math.pow(10,d); return Math.round(x*p)/p; }
+
+  // Agent01: raw features (mock).
+  function agent01_info(symbol, time_window){
+    const hour = new Date().toISOString().slice(0,13);
+    const rand = xorshift32(seedFromString(symbol + '|' + hour + '|' + time_window));
+
+    const volume_change = round(clamp((rand()*3.2), 0, 3.2), 2);      // 0..3.2x
+    const trade_count_change = round(clamp((rand()*3.2), 0, 3.2), 2);
+    const wallet_activity_change = round(clamp((rand()*1.6), 0, 1.6), 2);
+    const top_rank_duration_hours = Math.floor(rand()*60);
+
+    const large_order_detected = rand() > 0.55;
+    const smart_money_consistency = round(rand(), 2); // 0..1
+
+    return {
+      symbol,
+      time_window,
+      features: {
+        volume_change,
+        trade_count_change,
+        large_order_detected,
+        wallet_activity_change,
+        top_rank_duration_hours,
+        smart_money_consistency
+      }
+    };
+  }
+
+  // Agent02: market regime state machine (interpretable rules).
+  function agent02_regime(info){
+    const f = info.features;
+    const vol = f.volume_change;
+    const tc = f.trade_count_change;
+    const large = !!f.large_order_detected;
+    const sm = f.smart_money_consistency;
+
+    // Simple interpretable heuristics
+    let market_state = 'No-Info';
+    let confidence = 0.55;
+
+    const sync = (Math.abs(vol - tc) <= 0.7);
+    const strong = (vol >= 1.6 && tc >= 1.6);
+    const top10 = (f.top_rank_duration_hours >= 24);
+
+    if (large && (vol >= 2.6 || tc >= 2.6) && !sync) {
+      market_state = 'Liquidity_Shock';
+      confidence = 0.72;
+    }
+
+    if (sync && strong && sm >= 0.6 && top10) {
+      market_state = 'Active';
+      confidence = 0.74;
+    }
+
+    // Decay: strong but weakening smart money or losing top rank
+    if (sync && strong && (sm < 0.45 || f.top_rank_duration_hours < 12)) {
+      market_state = 'Information_Decay';
+      confidence = 0.66;
+    }
+
+    // No-info: high trade count but low volume = choppy noise
+    if ((tc >= 1.8 && vol < 1.1) || (sm < 0.35 && !large)) {
+      market_state = 'No-Info';
+      confidence = 0.78;
+    }
+
+    // Build a 24h duration breakdown (mock but consistent with regime)
+    const states = ['Active','No-Info','Liquidity_Shock','Information_Decay'];
+    const base = {Active:6, 'No-Info':14, Liquidity_Shock:4, Information_Decay:0};
+    // tweak based on current state
+    base[market_state] = clamp(base[market_state] + 2, 0, 24);
+    // normalize to 24
+    let total = states.reduce((s,k)=>s+base[k],0);
+    if (total !== 24) {
+      // adjust No-Info to compensate
+      base['No-Info'] = clamp(base['No-Info'] + (24-total), 0, 24);
+    }
+
+    const state_duration_24h = {};
+    for (const k of states) state_duration_24h[k] = base[k] + 'h';
+
+    return {
+      symbol: info.symbol,
+      market_state,
+      confidence: round(confidence, 2),
+      state_duration_24h
+    };
+  }
+
+  // Agent03: signal quality score (0-100).
+  function agent03_quality(info, regime){
+    const f = info.features;
+    let score = 0;
+    const reasons = [];
+
+    // core components
+    const vol = f.volume_change;
+    const tc = f.trade_count_change;
+    const topH = f.top_rank_duration_hours;
+    const sm = f.smart_money_consistency;
+
+    // scoring
+    score += clamp((vol-1)*22, 0, 35);
+    score += clamp((tc-1)*22, 0, 35);
+    score += clamp((topH/48)*15, 0, 15);
+    score += clamp(sm*15, 0, 15);
+
+    if (f.large_order_detected) score += 5;
+
+    // regime adjustments
+    if (regime.market_state === 'Active') score += 10;
+    if (regime.market_state === 'No-Info') score -= 20;
+    if (regime.market_state === 'Liquidity_Shock') score -= 10;
+    if (regime.market_state === 'Information_Decay') score -= 8;
+
+    score = Math.round(clamp(score, 0, 100));
+
+    // reasons (explain)
+    if (Math.abs(vol - tc) <= 0.7 && vol >= 1.4 && tc >= 1.4) reasons.push('volume 与 trade count 同步放大');
+    if (sm >= 0.6) reasons.push('聪明钱行为一致性较高');
+    if (topH >= 24) reasons.push('Top10 维持时间较长（>=24h）');
+    if (f.large_order_detected) reasons.push('检测到大额单/异常成交');
+    reasons.push('市场状态：' + regime.market_state);
+
+    let quality_label = 'Low';
+    if (score >= 75) quality_label = 'High';
+    else if (score >= 55) quality_label = 'Medium';
+
+    return {
+      symbol: info.symbol,
+      signal_score: score,
+      quality_label,
+      reasons
+    };
+  }
+
+  // Agent04: decision — strict constraints.
+  function agent04_decision(regime, quality){
+    const state = regime.market_state;
+
+    if (state !== 'Active') {
+      const map = {
+        'No-Info': {action:'AVOID', position_bias:'Neutral', risk_note:'Noise-dominant regime (No-Info). Strongly avoid.'},
+        'Liquidity_Shock': {action:'AVOID', position_bias:'Neutral', risk_note:'Liquidity/event shock. Do not trade; only interpret.'},
+        'Information_Decay': {action:'AVOID', position_bias:'Neutral', risk_note:'Information decaying; edge deteriorating.'}
+      };
+      return {
+        symbol: quality.symbol,
+        action: (map[state] || {action:'AVOID'}).action,
+        position_bias: (map[state] || {position_bias:'Neutral'}).position_bias,
+        risk_note: (map[state] || {risk_note:'Non-Active regime.'}).risk_note
+      };
+    }
+
+    // Active: only consider Watch/Trade based on quality
+    if (quality.quality_label === 'High') {
+      return {
+        symbol: quality.symbol,
+        action: 'WATCH',
+        position_bias: 'Neutral',
+        risk_note: 'Active regime + High quality. Watch for execution-quality entry; avoid forcing direction.'
+      };
+    }
+
+    return {
+      symbol: quality.symbol,
+      action: 'AVOID',
+      position_bias: 'Neutral',
+      risk_note: 'Active regime but quality not high enough; avoid overtrading.'
+    };
+  }
+
+  // Agent05: tracking/journal (no execution).
+  function agent05_tracking(regime, quality, decision){
+    return {
+      symbol: decision.symbol,
+      entry_context: {
+        market_state: regime.market_state,
+        signal_score: quality.signal_score,
+        decision: decision.action
+      },
+      post_trade_review: 'Demo mode: no trade executed. When execution is added, log entry/exit + 1h/4h/24h outcomes here.'
+    };
+  }
+
+  function pretty(obj){
+    return JSON.stringify(obj, null, 2);
+  }
+
+  function renderStateBar(duration){
+    const colors = {
+      'Active': 'rgba(118,255,155,.8)',
+      'No-Info': 'rgba(138,160,181,.85)',
+      'Liquidity_Shock': 'rgba(255,204,102,.9)',
+      'Information_Decay': 'rgba(255,107,107,.85)'
+    };
+
+    const order = ['Active','No-Info','Liquidity_Shock','Information_Decay'];
+    const hours = {};
+    let total = 0;
+    for (const k of order) {
+      const h = parseInt((duration[k] || '0h').replace('h',''), 10) || 0;
+      hours[k] = h;
+      total += h;
+    }
+    if (total <= 0) total = 24;
+
+    const bar = document.getElementById('bar');
+    bar.innerHTML = '';
+    bar.style.display = 'flex';
+
+    const legend = document.getElementById('legend');
+    legend.innerHTML = '';
+
+    for (const k of order) {
+      const pct = (hours[k]/total)*100;
+      const seg = document.createElement('div');
+      seg.style.width = pct + '%';
+      seg.style.background = colors[k] || '#888';
+      bar.appendChild(seg);
+
+      const item = document.createElement('div');
+      item.style.display = 'flex';
+      item.style.alignItems = 'center';
+      item.style.gap = '6px';
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+      dot.style.background = colors[k] || '#888';
+      const txt = document.createElement('span');
+      txt.textContent = `${k}: ${hours[k]}h`;
+      item.appendChild(dot);
+      item.appendChild(txt);
+      legend.appendChild(item);
+    }
+  }
+
+  function renderKPIs(regime, quality, decision){
+    const kpi = document.getElementById('kpi');
+    kpi.innerHTML = '';
+
+    const stateClass = regime.market_state === 'Active' ? 'ok' : (regime.market_state === 'No-Info' ? 'bad' : 'warn');
+    const qClass = quality.quality_label === 'High' ? 'ok' : (quality.quality_label === 'Low' ? 'bad' : 'warn');
+    const aClass = decision.action === 'WATCH' ? 'warn' : (decision.action === 'TRADE' ? 'ok' : 'bad');
+
+    const pills = [
+      {cls: stateClass, html: `<b>State</b>: ${regime.market_state} (${Math.round(regime.confidence*100)}%)`},
+      {cls: qClass, html: `<b>Signal</b>: ${quality.signal_score} / 100 (${quality.quality_label})`},
+      {cls: aClass, html: `<b>Action</b>: ${decision.action}`}
+    ];
+
+    for (const p of pills) {
+      const el = document.createElement('div');
+      el.className = `pill ${p.cls}`;
+      el.innerHTML = p.html;
+      kpi.appendChild(el);
+    }
+  }
+
+  function runPipeline(){
+    const symbol = document.getElementById('symbol').value;
+    const a1 = agent01_info(symbol, '24h');
+    const a2 = agent02_regime(a1);
+    const a3 = agent03_quality(a1, a2);
+    const a4 = agent04_decision(a2, a3);
+    const a5 = agent05_tracking(a2, a3, a4);
+
+    document.getElementById('a1').textContent = pretty(a1);
+    document.getElementById('a2').textContent = pretty(a2);
+    document.getElementById('a3').textContent = pretty(a3);
+    document.getElementById('a4').textContent = pretty(a4);
+    document.getElementById('a5').textContent = pretty(a5);
+
+    renderKPIs(a2, a3, a4);
+    renderStateBar(a2.state_duration_24h);
+  }
+
+  document.getElementById('run').addEventListener('click', runPipeline);
+  // initial
+  runPipeline();
+</script>
+</body>
+</html>

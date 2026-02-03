@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Voice Intercom</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background: #0b0b0f; color: #eee; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 8px; font-size: 18px; }
+    .sub { color: #aaa; font-size: 13px; margin-bottom: 18px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card { background: #141422; border: 1px solid #2a2a44; border-radius: 12px; padding: 14px; }
+    button { background: #e01b24; color: #fff; border: 0; border-radius: 10px; padding: 10px 12px; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #2a2a44; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    textarea { width: 100%; min-height: 76px; resize: vertical; background: #0f0f1a; color: #eee; border: 1px solid #2a2a44; border-radius: 10px; padding: 10px; box-sizing: border-box; }
+    .log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size: 12px; line-height: 1.4; background: #0f0f1a; border: 1px solid #2a2a44; border-radius: 10px; padding: 10px; height: 280px; overflow: auto; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#2a2a44; color:#cfcfe8; font-size:12px; }
+    .controls { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
+    .hint { color:#aaa; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>网页对讲（本地版）</h1>
+    <div class="sub">浏览器语音识别（STT）→ /api/chat → 浏览器语音合成（TTS）。不涉及电话线路。</div>
+
+    <div class="row">
+      <div class="card">
+        <div class="controls">
+          <button id="btnStart">按住说话 / 开始听写</button>
+          <button id="btnStop" class="secondary" disabled>停止</button>
+          <span id="status" class="pill">idle</span>
+        </div>
+        <div class="hint" style="margin-top:10px;">提示：首次使用会弹麦克风权限。若浏览器不支持 SpeechRecognition，会降级为手动输入。</div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:700; margin-bottom:8px;">你说的话（可编辑）</div>
+        <textarea id="input" placeholder="你可以直接打字，或用上面的语音听写…"></textarea>
+        <div class="controls" style="margin-top:10px;">
+          <button id="btnSend">发送</button>
+          <button id="btnClear" class="secondary">清空</button>
+          <label class="hint"><input type="checkbox" id="chkAutoSpeak" checked /> 自动朗读回复</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="font-weight:700;">对话日志</div>
+          <div class="hint" id="health"></div>
+        </div>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  const logEl = el('log');
+  const inputEl = el('input');
+  const statusEl = el('status');
+  const healthEl = el('health');
+  const btnStart = el('btnStart');
+  const btnStop = el('btnStop');
+  const btnSend = el('btnSend');
+  const btnClear = el('btnClear');
+  const chkAutoSpeak = el('chkAutoSpeak');
+
+  function append(role, text) {
+    const line = `[${new Date().toLocaleTimeString()}] ${role}: ${text}\n`;
+    logEl.textContent += line;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  async function health() {
+    try {
+      const r = await fetch('/api/health');
+      const j = await r.json();
+      healthEl.textContent = j.hasOpenAIKey ? 'OpenAI: OK' : 'OpenAI: 未配置（演示模式）';
+    } catch {
+      healthEl.textContent = 'server: offline';
+    }
+  }
+  health();
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
+
+  async function sendText(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return;
+    append('you', trimmed);
+    btnSend.disabled = true;
+    try {
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: trimmed,
+          system: 'You are a concise assistant. Reply in Chinese by default.'
+        })
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error ? JSON.stringify(j.error) : 'unknown error');
+      append('assistant', j.text);
+      if (chkAutoSpeak.checked) speak(j.text);
+    } catch (e) {
+      append('error', String(e.message || e));
+    } finally {
+      btnSend.disabled = false;
+    }
+  }
+
+  btnSend.addEventListener('click', () => {
+    const t = inputEl.value;
+    inputEl.value = '';
+    sendText(t);
+  });
+
+  btnClear.addEventListener('click', () => {
+    logEl.textContent = '';
+    inputEl.value = '';
+  });
+
+  // SpeechRecognition
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null;
+  if (SR) {
+    rec = new SR();
+    rec.lang = 'zh-CN';
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    let finalText = '';
+
+    rec.onstart = () => {
+      statusEl.textContent = 'listening';
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      finalText = '';
+    };
+
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const tr = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += tr;
+        else interim += tr;
+      }
+      inputEl.value = (finalText + interim).trim();
+    };
+
+    rec.onerror = (e) => {
+      append('stt', `SpeechRecognition error: ${e.error || 'unknown'}`);
+    };
+
+    rec.onend = () => {
+      statusEl.textContent = 'idle';
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+    };
+
+    btnStart.addEventListener('click', () => rec.start());
+    btnStop.addEventListener('click', () => rec.stop());
+  } else {
+    statusEl.textContent = 'no-stt';
+    btnStart.disabled = true;
+    btnStop.disabled = true;
+    append('info', '当前浏览器不支持 SpeechRecognition，已降级为手动输入。建议用 Chrome。');
+  }
+</script>
+</body>
+</html>

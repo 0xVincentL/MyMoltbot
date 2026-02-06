@@ -134,9 +134,17 @@ function fmtMoney(x, digits = 0) {
 
 function buildAlert(p, scored) {
   const base = p?.baseToken ?? {};
+  const token = base.address;
+  const g = gmgnUrl(token);
+  const onlyGmgn = String(getArg('--only-gmgn', process.env.ONLY_GMGN || 'true')).toLowerCase();
+
+  // If requested, emit only the GMGN link (clean Telegram UX).
+  if (onlyGmgn === '1' || onlyGmgn === 'true' || onlyGmgn === 'yes') {
+    return g || '';
+  }
+
   const sym = base.symbol ?? '???';
   const name = base.name ?? '';
-  const token = base.address;
   const url = p?.url;
   const m = scored.metrics;
 
@@ -144,7 +152,6 @@ function buildAlert(p, scored) {
   lines.push(`Meme alpha (Dexscreener) 评分 ${scored.score}/100`);
   lines.push(`${sym}${name ? ` (${name})` : ''}`);
   lines.push(url);
-  const g = gmgnUrl(token);
   if (g) lines.push(g);
   lines.push(`liq ${fmtMoney(m.liq)} | vol5 ${fmtMoney(m.vol5)} | vol1 ${fmtMoney(m.vol1)} | tx5 ${m.tx5}`);
   if (Number.isFinite(m.fdvL) && m.fdvL !== Infinity) lines.push(`FDV ${fmtMoney(m.fdv)} | FDV/L ${m.fdvL.toFixed(1)}`);

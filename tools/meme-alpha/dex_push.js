@@ -19,7 +19,10 @@ const getArg = (k, def) => {
 
 const DRY_RUN = FLAG.has('--dry-run');
 const EMIT_JSON = FLAG.has('--emit-json');
-const CHAIN_ID = 'solana';
+const CHAINS = String(getArg('--chains', process.env.CHAINS || 'solana'))
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const LIMIT_TOKENS = Number(getArg('--limit', '60'));
 const COOLDOWN_MIN = Number(getArg('--cooldown-min', '30'));
@@ -37,9 +40,11 @@ const STATE_PATH = path.resolve('memory/dexscreener-alpha-state.json');
 // Example format provided by Vincent:
 // https://gmgn.ai/sol/token/KbZpyS5i_<TOKEN_ADDRESS>
 const GMGN_TRACK = String(getArg('--gmgn-track', process.env.GMGN_TRACK || 'KbZpyS5i'));
-function gmgnUrl(tokenAddress) {
+function gmgnUrl(chainId, tokenAddress) {
   if (!tokenAddress) return null;
-  return `https://gmgn.ai/sol/token/${GMGN_TRACK}_${tokenAddress}`;
+  if (chainId === 'solana') return `https://gmgn.ai/sol/token/${GMGN_TRACK}_${tokenAddress}`;
+  if (chainId === 'base') return `https://gmgn.ai/base/token/${GMGN_TRACK}_${tokenAddress}`;
+  return null;
 }
 
 function loadState() {
@@ -79,13 +84,15 @@ async function fetchJson(url, timeoutMs = 15000) {
   }
 }
 
-function pickBestPair(pairs) {
+function pickBestPair(pairs, chainId) {
   if (!Array.isArray(pairs) || pairs.length === 0) return null;
-  const solPairs = pairs.filter(p => p?.chainId === CHAIN_ID);
-  if (solPairs.length === 0) return null;
+  const chainPairs = pairs.filter((p) => p?.chainId === chainId);
+  if (chainPairs.length === 0) return null;
   // Choose by highest liquidity USD, then volume h1
-  solPairs.sort((a, b) => (b?.liquidity?.usd ?? 0) - (a?.liquidity?.usd ?? 0) || (b?.volume?.h1 ?? 0) - (a?.volume?.h1 ?? 0));
-  return solPairs[0];
+  chainPairs.sort(
+    (a, b) => (b?.liquidity?.usd ?? 0) - (a?.liquidity?.usd ?? 0) || (b?.volume?.h1 ?? 0) - (a?.volume?.h1 ?? 0)
+  );
+  return chainPairs[0];
 }
 
 function scorePair(p, boosted) {
@@ -135,7 +142,8 @@ function fmtMoney(x, digits = 0) {
 function buildAlert(p, scored) {
   const base = p?.baseToken ?? {};
   const token = base.address;
-  const g = gmgnUrl(token);
+  const chainId = p?.chainId;
+  const g = gmgnUrl(chainId, token);
   const onlyGmgn = String(getArg('--only-gmgn', process.env.ONLY_GMGN || '')).toLowerCase();
 
   // If requested, emit only the GMGN link.
@@ -171,21 +179,31 @@ async function main() {
     fetchJson('https://api.dexscreener.com/token-boosts/latest/v1'),
   ]);
 
-  const boostedSet = new Set([
-    ...(Array.isArray(boostsTop) ? boostsTop : []),
-    ...(Array.isArray(boostsLatest) ? boostsLatest : []),
-  ].filter(x => x?.chainId === CHAIN_ID).map(x => x.tokenAddress));
+  // guard
+  if (!Array.isArray(CHAINS) || CHAINS.length === 0) {
+    throw new Error('No chains configured. Use --chains solana,base');
+  }
 
-  const tokens = [];
+  // tokenAddress is not chain-unique, so key by chainId:tokenAddress
+  const boostedSet = new Set(
+    [...(Array.isArray(boostsTop) ? boostsTop : []), ...(Array.isArray(boostsLatest) ? boostsLatest : [])]
+      .filter((x) => CHAINS.includes(x?.chainId))
+      .map((x) => `${x.chainId}:${x.tokenAddress}`)
+  );
+
+  const tokens = []; // { chainId, tokenAddress }
   const seen = new Set();
   for (const src of [latestProfiles, boostsTop, boostsLatest]) {
     if (!Array.isArray(src)) continue;
     for (const row of src) {
-      if (row?.chainId !== CHAIN_ID) continue;
+      if (!CHAINS.includes(row?.chainId)) continue;
       const t = row?.tokenAddress;
-      if (!t || seen.has(t)) continue;
-      seen.add(t);
-      tokens.push(t);
+      const chainId = row?.chainId;
+      if (!t || !chainId) continue;
+      const k = `${chainId}:${t}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      tokens.push({ chainId, tokenAddress: t });
       if (tokens.length >= LIMIT_TOKENS) break;
     }
     if (tokens.length >= LIMIT_TOKENS) break;
@@ -198,17 +216,20 @@ async function main() {
   let idx = 0;
   async function worker() {
     while (idx < tokens.length) {
-      const t = tokens[idx++];
+      const item = tokens[idx++];
+      const chainId = item.chainId;
+      const t = item.tokenAddress;
       try {
         const j = await fetchJson(`https://api.dexscreener.com/latest/dex/tokens/${t}`);
-        const best = pickBestPair(j?.pairs);
+        const best = pickBestPair(j?.pairs, chainId);
         if (!best) continue;
 
         const pairAddr = best.pairAddress;
-        const lastSent = state.sentPairs[pairAddr] ?? 0;
+        const pairKey = `${chainId}:${pairAddr}`;
+        const lastSent = state.sentPairs[pairKey] ?? 0;
         if (now - lastSent < cooldownMs) continue;
 
-        const boosted = boostedSet.has(t);
+        const boosted = boostedSet.has(`${chainId}:${t}`);
         const scored = scorePair(best, boosted);
 
         // Trigger condition: hard pass + score threshold
@@ -216,7 +237,7 @@ async function main() {
           const alert = {
             kind: 'dexscreener_meme_alpha',
             whenMs: now,
-            chainId: CHAIN_ID,
+            chainId,
             tokenAddress: t,
             pairAddress: pairAddr,
             url: best.url,
@@ -228,7 +249,7 @@ async function main() {
             text: buildAlert(best, scored),
           };
           alerts.push(alert);
-          state.sentPairs[pairAddr] = now;
+          state.sentPairs[pairKey] = now;
         }
       } catch (e) {
         // ignore individual token failures
@@ -284,6 +305,12 @@ async function main() {
 }
 
 main().catch((e) => {
+  // Ignore EPIPE (happens when piping output into `head`, etc.)
+  if (String(e?.code || '').toUpperCase() === 'EPIPE') return;
   console.error(String(e?.stack || e));
   process.exitCode = 1;
+});
+
+process.stdout.on('error', (e) => {
+  if (String(e?.code || '').toUpperCase() === 'EPIPE') return;
 });

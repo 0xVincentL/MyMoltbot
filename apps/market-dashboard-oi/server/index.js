@@ -36,6 +36,12 @@ app.get('/api/history', (req, res) => {
   res.json({ ok: true, days, rows: rows.slice(-days) });
 });
 
+const { readSummary: readSmartMoneySummary } = require('./smartmoney');
+
+app.get('/api/smartmoney', (req, res) => {
+  res.json(readSmartMoneySummary());
+});
+
 app.get('/api/snapshot', async (req, res) => {
   const parsed = SnapshotQuery.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ ok: false, error: parsed.error.issues });

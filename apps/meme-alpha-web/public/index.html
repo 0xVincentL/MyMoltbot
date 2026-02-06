@@ -135,7 +135,12 @@
           <span class="pill">tx5 ${m.tx5 ?? '-'}</span>
           <span class="pill">fdv/liq ${(m.fdvL!==undefined && m.fdvL!==null) ? Number(m.fdvL).toFixed(1) : '-'}</span>
         </div>
-        <div style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noreferrer">Dexscreener</a> &nbsp; <span class="muted">token: ${a.tokenAddress}</span></div>
+        <div style="margin-top:8px">
+          <a href="${a.url}" target="_blank" rel="noreferrer">Dexscreener</a>
+          &nbsp;·&nbsp;
+          <a href="${('https://gmgn.ai/sol/token/KbZpyS5i_' + a.tokenAddress)}" target="_blank" rel="noreferrer">GMGN</a>
+          &nbsp; <span class="muted">token: ${a.tokenAddress}</span>
+        </div>
         ${flags ? `<div class="flags muted">flags: ${flags}</div>` : ''}
       `;
       box.appendChild(div);

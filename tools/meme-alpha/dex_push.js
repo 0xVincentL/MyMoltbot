@@ -33,6 +33,15 @@ const MAX_FDV_L = Number(getArg('--max-fdv-liq', '200'));
 
 const STATE_PATH = path.resolve('memory/dexscreener-alpha-state.json');
 
+// GMGN referral/tracking
+// Example format provided by Vincent:
+// https://gmgn.ai/sol/token/KbZpyS5i_<TOKEN_ADDRESS>
+const GMGN_TRACK = String(getArg('--gmgn-track', process.env.GMGN_TRACK || 'KbZpyS5i'));
+function gmgnUrl(tokenAddress) {
+  if (!tokenAddress) return null;
+  return `https://gmgn.ai/sol/token/${GMGN_TRACK}_${tokenAddress}`;
+}
+
 function loadState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
@@ -135,6 +144,8 @@ function buildAlert(p, scored) {
   lines.push(`Meme alpha (Dexscreener) 评分 ${scored.score}/100`);
   lines.push(`${sym}${name ? ` (${name})` : ''}`);
   lines.push(url);
+  const g = gmgnUrl(token);
+  if (g) lines.push(g);
   lines.push(`liq ${fmtMoney(m.liq)} | vol5 ${fmtMoney(m.vol5)} | vol1 ${fmtMoney(m.vol1)} | tx5 ${m.tx5}`);
   if (Number.isFinite(m.fdvL) && m.fdvL !== Infinity) lines.push(`FDV ${fmtMoney(m.fdv)} | FDV/L ${m.fdvL.toFixed(1)}`);
   if (scored.reasons.length) lines.push(`flags: ${scored.reasons.join(', ')}`);

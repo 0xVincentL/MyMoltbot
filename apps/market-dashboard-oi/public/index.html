@@ -140,11 +140,29 @@
 
       // macro
       const st = j.stablecoins || {};
-      const etf = j.solEtf || {};
-      el('macro').innerHTML = rows('稳定币 & ETF', [
+      // Stablecoins
+      el('macro').innerHTML = rows('稳定币总市值', [
         ['稳定币总市值(USD)', st.totalCirculatingUsd ? `$${fmt(st.totalCirculatingUsd,0)}` : '-'],
-        ['SOL ETF', etf.available ? 'OK' : (etf.reason || 'unavailable')],
       ]);
+
+      // ETF
+      const etf = j.etf || {};
+      const a = etf.assets || {};
+      const fmtEtf = (x) => (x && x.available) ? 'OK' : (x?.reason || 'unavailable');
+      // Create/replace an ETF card (reuse onchain card header area later; simplest: append below macro card)
+      const etfHtml = rows('ETF（BTC / ETH / SOL）', [
+        ['BTC ETF', fmtEtf(a.BTC)],
+        ['ETH ETF', fmtEtf(a.ETH)],
+        ['SOL ETF', fmtEtf(a.SOL)],
+      ]);
+      let etfCard = document.getElementById('etf');
+      if (!etfCard) {
+        etfCard = document.createElement('div');
+        etfCard.className = 'card';
+        etfCard.id = 'etf';
+        document.querySelector('.grid').insertBefore(etfCard, document.getElementById('derivs'));
+      }
+      etfCard.innerHTML = etfHtml;
 
       // derivs
       const fr = j.fundingRates || {};

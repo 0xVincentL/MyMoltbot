@@ -11,7 +11,7 @@ const {
   fetchBinanceLiquidations,
   fetchCoingeckoPrices,
   fetchExchangeBtcBalances,
-  fetchSolEtf,
+  fetchEtf,
 } = require('./sources');
 
 const { loadHistory, upsertDailySnapshot } = require('./storage');
@@ -47,7 +47,7 @@ app.get('/api/snapshot', async (req, res) => {
 
   try {
     // Run in parallel
-    const [stable, dexVol, prices, funding, oi, liq, cexBtc, solEtf] = await Promise.all([
+    const [stable, dexVol, prices, funding, oi, liq, cexBtc, etf] = await Promise.all([
       fetchStablecoins(),
       fetchDefiLlamaDexVolume(),
       fetchCoingeckoPrices(symbols),
@@ -55,7 +55,7 @@ app.get('/api/snapshot', async (req, res) => {
       fetchBinanceOpenInterest(symbols),
       fetchBinanceLiquidations(symbols),
       fetchExchangeBtcBalances(),
-      fetchSolEtf(),
+      fetchEtf(),
     ]);
 
     // Minimal “global” aggregation (MVP): Binance-only for OI / liquidations.
@@ -73,7 +73,7 @@ app.get('/api/snapshot', async (req, res) => {
       openInterest: oi,
       liquidations: liq,
       exchangeBtcBalances: cexBtc,
-      solEtf,
+      etf,
       notes: {
         oiCoverage: 'MVP uses Binance Futures open interest only (not full global). Next: add Bybit/OKX/Deribit aggregation.',
         liquidationCoverage: 'Liquidations are optional; if blocked by exchange (401), we mark as unavailable.',

@@ -163,11 +163,17 @@ async function fetchExchangeBtcBalances() {
   };
 }
 
-async function fetchSolEtf() {
+async function fetchEtf() {
+  // Public MVP has no reliable free source for ETF flows.
+  // Keep explicit per-asset stubs to avoid misleading output.
   return {
     available: false,
-    reason: 'SOL ETF flows require dedicated source (e.g., CoinGlass ETF endpoints).',
     source: null,
+    assets: {
+      BTC: { available: false, reason: 'BTC ETF flows require dedicated source (CoinGlass recommended).' },
+      ETH: { available: false, reason: 'ETH ETF flows require dedicated source (CoinGlass recommended).' },
+      SOL: { available: false, reason: 'SOL ETF flows require dedicated source (CoinGlass recommended).' },
+    },
   };
 }
 
@@ -179,5 +185,5 @@ module.exports = {
   fetchBinanceOpenInterest,
   fetchBinanceLiquidations,
   fetchExchangeBtcBalances,
-  fetchSolEtf,
+  fetchEtf,
 };

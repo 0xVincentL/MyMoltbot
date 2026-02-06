@@ -57,7 +57,7 @@ function upsertDailySnapshot(snapshot) {
 
     // placeholders for future CoinGlass integration
     exchangeBtcBalancesAvailable: snapshot.exchangeBtcBalances?.available ?? false,
-    solEtfAvailable: snapshot.solEtf?.available ?? false,
+    etfAvailable: snapshot.etf?.available ?? false,
   };
 
   const idx = rows.findIndex((r) => r.day === key);

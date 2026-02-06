@@ -89,20 +89,44 @@
     return j;
   }
 
+  function sortAlerts(alerts){
+    const uniq = new Map();
+    for(const a of (alerts||[])){
+      const k = a.pairAddress || a.tokenAddress;
+      if(!k) continue;
+      const prev = uniq.get(k);
+      if(!prev){ uniq.set(k,a); continue; }
+      if(Number(a.score||0) > Number(prev.score||0)) uniq.set(k,a);
+    }
+    return Array.from(uniq.values()).sort((a,b)=>{
+      const as=Number(a.score||0), bs=Number(b.score||0);
+      if(bs!==as) return bs-as;
+      const av1=Number(a.metrics?.vol1||0), bv1=Number(b.metrics?.vol1||0);
+      if(bv1!==av1) return bv1-av1;
+      const aliq=Number(a.metrics?.liq||0), bliq=Number(b.metrics?.liq||0);
+      if(bliq!==aliq) return bliq-aliq;
+      const atx=Number(a.metrics?.tx5||0), btx=Number(b.metrics?.tx5||0);
+      return btx-atx;
+    });
+  }
+
   function renderAlerts(alerts){
     const box = el('alerts');
     box.innerHTML = '';
-    if(!alerts || alerts.length===0){
+    const sorted = sortAlerts(alerts);
+    if(!sorted || sorted.length===0){
       box.innerHTML = '<div class="item"><div class="muted">No alerts in this scan.</div></div>';
       return;
     }
-    for(const a of alerts){
+    let i = 0;
+    for(const a of sorted){
+      i++;
       const m = a.metrics || {};
       const flags = (a.reasons || []).join(', ');
       const div = document.createElement('div');
       div.className = 'item';
       div.innerHTML = `
-        <div class="title">${a.symbol || ''} <span class="muted">${a.name || ''}</span></div>
+        <div class="title">#${i} ${a.symbol || ''} <span class="muted">${a.name || ''}</span></div>
         <div class="row">
           <span class="pill">score ${a.score}</span>
           <span class="pill">liq ${money(m.liq)}</span>

@@ -221,14 +221,46 @@ async function main() {
 
   await Promise.all(Array.from({ length: CONC }, () => worker()));
 
+  // Sort & dedupe output so Telegram/Web see best candidates first.
+  // (Concurrency makes discovery order nondeterministic.)
+  const uniq = new Map();
+  for (const a of alerts) {
+    const k = a.pairAddress || a.tokenAddress;
+    if (!k) continue;
+    // keep the better one if duplicated
+    const prev = uniq.get(k);
+    if (!prev) {
+      uniq.set(k, a);
+      continue;
+    }
+    const prevScore = Number(prev.score ?? 0);
+    const curScore = Number(a.score ?? 0);
+    if (curScore > prevScore) uniq.set(k, a);
+  }
+
+  const sorted = Array.from(uniq.values()).sort((a, b) => {
+    const as = Number(a.score ?? 0);
+    const bs = Number(b.score ?? 0);
+    if (bs !== as) return bs - as;
+    const av1 = Number(a.metrics?.vol1 ?? 0);
+    const bv1 = Number(b.metrics?.vol1 ?? 0);
+    if (bv1 !== av1) return bv1 - av1;
+    const aliq = Number(a.metrics?.liq ?? 0);
+    const bliq = Number(b.metrics?.liq ?? 0);
+    if (bliq !== aliq) return bliq - aliq;
+    const atx = Number(a.metrics?.tx5 ?? 0);
+    const btx = Number(b.metrics?.tx5 ?? 0);
+    return btx - atx;
+  });
+
   state.lastRunMs = now;
   if (!DRY_RUN) saveState(state);
 
   if (EMIT_JSON) {
-    for (const a of alerts) process.stdout.write(JSON.stringify(a) + '\n');
+    for (const a of sorted) process.stdout.write(JSON.stringify(a) + '\n');
   } else {
-    if (alerts.length === 0) return;
-    for (const a of alerts) {
+    if (sorted.length === 0) return;
+    for (const a of sorted) {
       process.stdout.write(a.text + '\n\n');
     }
   }

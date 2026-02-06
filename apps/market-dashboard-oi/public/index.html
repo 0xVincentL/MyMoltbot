@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market Dashboard (OI)</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin:0; background:#0b0b0f; color:#eee; }
+    .wrap { max-width: 1100px; margin:0 auto; padding: 18px; }
+    h1 { margin: 0 0 6px; font-size: 18px; }
+    .sub { color:#aaa; font-size: 12px; margin-bottom: 14px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { background:#141422; border:1px solid #2a2a44; border-radius:12px; padding: 12px; }
+    .row { display:flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom:1px dashed #2a2a44; }
+    .row:last-child { border-bottom:0; }
+    .k { color:#bbb; }
+    .v { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; }
+    button { background:#e01b24; color:#fff; border:0; border-radius:10px; padding: 8px 10px; font-weight: 700; cursor: pointer; }
+    input { background:#0f0f1a; color:#eee; border:1px solid #2a2a44; border-radius:10px; padding: 8px 10px; width: 260px; }
+    .warn { color:#fbbf24; font-size: 12px; }
+    .ok { color:#34d399; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>全网合约数据看板（MVP）</h1>
+    <div class="sub">实时聚合：价格/稳定币市值/DEX链上数据/合约费率/持仓(OI)/爆仓(样本)。后端会明确覆盖范围，避免误导。</div>
+
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap: wrap;">
+      <button id="btn">刷新</button>
+      <span id="asof" class="sub"></span>
+      <span id="status" class="sub"></span>
+      <span class="warn">注意：当前 OI/爆仓为 Binance MVP 覆盖（不是完整全网），后续会扩展 Bybit/OKX/Deribit 并做合计。</span>
+    </div>
+
+    <div class="grid">
+      <div class="card" id="prices"></div>
+      <div class="card" id="macro"></div>
+      <div class="card" id="derivs"></div>
+      <div class="card" id="onchain"></div>
+    </div>
+  </div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  const fmt = (x, d=2) => (x===null||x===undefined||Number.isNaN(x)) ? '-' : Number(x).toLocaleString(undefined, {maximumFractionDigits:d});
+
+  function rows(title, items) {
+    return `<div style="font-weight:700; margin-bottom:6px;">${title}</div>` + items.map(([k,v])=>`<div class="row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  }
+
+  async function refresh() {
+    el('status').textContent = 'loading...';
+    try {
+      const r = await fetch('/api/snapshot?symbols=BTC,ETH');
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'bad response');
+
+      el('asof').textContent = 'asOf: ' + j.asOf;
+      el('status').textContent = 'ok';
+
+      // prices
+      const p = j.prices || {};
+      el('prices').innerHTML = rows('价格（CoinGecko）', [
+        ['BTC', p.BTC ? `$${fmt(p.BTC.usd,0)} (${fmt(p.BTC.usd24hChangePct,2)}% 24h)` : '-'],
+        ['ETH', p.ETH ? `$${fmt(p.ETH.usd,0)} (${fmt(p.ETH.usd24hChangePct,2)}% 24h)` : '-'],
+      ]);
+
+      // macro
+      const st = j.stablecoins || {};
+      el('macro').innerHTML = rows('稳定币 & ETF', [
+        ['稳定币总市值(USD)', st.totalCirculatingUsd ? `$${fmt(st.totalCirculatingUsd,0)}` : '-'],
+        ['ETF', 'MVP 未接入（需要稳定来源/或API Key）'],
+      ]);
+
+      // derivs
+      const fr = j.fundingRates || {};
+      const oi = j.openInterest || {};
+      const liq = j.liquidations || {};
+      el('derivs').innerHTML = rows('合约（Binance Futures）', [
+        ['BTC 资金费率', fr.BTC ? `${fr.BTC.fundingRate} (next: ${fr.BTC.nextFundingTime || '-'})` : '-'],
+        ['ETH 资金费率', fr.ETH ? `${fr.ETH.fundingRate} (next: ${fr.ETH.nextFundingTime || '-'})` : '-'],
+        ['BTC OI(USD估算)', oi.BTC?.openInterestNotionalUsd ? `$${fmt(oi.BTC.openInterestNotionalUsd,0)}` : '-'],
+        ['ETH OI(USD估算)', oi.ETH?.openInterestNotionalUsd ? `$${fmt(oi.ETH.openInterestNotionalUsd,0)}` : '-'],
+        ['BTC 爆仓样本(notional估算)', liq.BTC ? `$${fmt(liq.BTC.recentNotionalUsd_est,0)} / ${liq.BTC.recentForceOrders} orders` : '-'],
+        ['ETH 爆仓样本(notional估算)', liq.ETH ? `$${fmt(liq.ETH.recentNotionalUsd_est,0)} / ${liq.ETH.recentForceOrders} orders` : '-'],
+      ]);
+
+      // onchain
+      el('onchain').innerHTML = rows('链上（DefiLlama）', [
+        ['DEX 24h Volume(USD)', j.onchain?.dexVolume24hUsd ? `$${fmt(j.onchain.dexVolume24hUsd,0)}` : '-'],
+      ]);
+
+    } catch (e) {
+      el('status').textContent = 'error: ' + String(e.message || e);
+    }
+  }
+
+  el('btn').addEventListener('click', refresh);
+  refresh();
+</script>
+</body>
+</html>

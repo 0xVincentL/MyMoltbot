@@ -140,9 +140,10 @@
 
       // macro
       const st = j.stablecoins || {};
+      const etf = j.solEtf || {};
       el('macro').innerHTML = rows('稳定币 & ETF', [
         ['稳定币总市值(USD)', st.totalCirculatingUsd ? `$${fmt(st.totalCirculatingUsd,0)}` : '-'],
-        ['ETF', 'MVP 未接入（需要稳定来源/或API Key）'],
+        ['SOL ETF', etf.available ? 'OK' : (etf.reason || 'unavailable')],
       ]);
 
       // derivs
@@ -159,8 +160,10 @@
       ]);
 
       // onchain
-      el('onchain').innerHTML = rows('链上（DefiLlama）', [
+      const cex = j.exchangeBtcBalances || {};
+      el('onchain').innerHTML = rows('链上 & 交易所储备', [
         ['DEX 24h Volume(USD)', j.onchain?.dexVolume24hUsd ? `$${fmt(j.onchain.dexVolume24hUsd,0)}` : '-'],
+        ['交易所 BTC 余额', cex.available ? 'OK' : (cex.reason || 'unavailable')],
       ]);
 
     } catch (e) {

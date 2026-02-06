@@ -1,18 +1,20 @@
 [
   {
     "day": "2026-02-06",
-    "asOf": "2026-02-06T06:36:55.255Z",
-    "btc": 65301,
-    "eth": 1929.86,
-    "btcChg24hPct": -7.64744819678677,
-    "ethChg24hPct": -7.542172563348057,
+    "asOf": "2026-02-06T06:50:12.574Z",
+    "btc": 64952,
+    "eth": 1915.78,
+    "btcChg24hPct": -7.994873077164651,
+    "ethChg24hPct": -7.8365811444647795,
     "stableMcapUsd": 304511908991.2599,
-    "dexVol24hUsd": 18887844555,
-    "btcFunding": -0.00010941,
-    "ethFunding": -0.00008894,
-    "btcOiUsd": 5678216234.5146,
-    "ethOiUsd": 3533299898.8944225,
+    "dexVol24hUsd": 18887846219,
+    "btcFunding": -0.0001198,
+    "ethFunding": -0.00008231,
+    "btcOiUsd": 5615322925.947201,
+    "ethOiUsd": 3492459609.10015,
     "btcLiqUsdEst": null,
-    "ethLiqUsdEst": null
+    "ethLiqUsdEst": null,
+    "exchangeBtcBalancesAvailable": false,
+    "solEtfAvailable": false
   }
 ]

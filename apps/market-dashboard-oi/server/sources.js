@@ -154,6 +154,23 @@ async function fetchBinanceLiquidations(symbols) {
   return out;
 }
 
+// Exchange BTC balances + SOL ETF (public MVP has no reliable free source)
+async function fetchExchangeBtcBalances() {
+  return {
+    available: false,
+    reason: 'No reliable public endpoint without API key. Recommend CoinGlass (API key) for exchange BTC balances/reserves.',
+    source: null,
+  };
+}
+
+async function fetchSolEtf() {
+  return {
+    available: false,
+    reason: 'SOL ETF flows require dedicated source (e.g., CoinGlass ETF endpoints).',
+    source: null,
+  };
+}
+
 module.exports = {
   fetchStablecoins,
   fetchDefiLlamaDexVolume,
@@ -161,4 +178,6 @@ module.exports = {
   fetchBinanceFundingRates,
   fetchBinanceOpenInterest,
   fetchBinanceLiquidations,
+  fetchExchangeBtcBalances,
+  fetchSolEtf,
 };

@@ -10,6 +10,8 @@ const {
   fetchBinanceOpenInterest,
   fetchBinanceLiquidations,
   fetchCoingeckoPrices,
+  fetchExchangeBtcBalances,
+  fetchSolEtf,
 } = require('./sources');
 
 const { loadHistory, upsertDailySnapshot } = require('./storage');
@@ -45,13 +47,15 @@ app.get('/api/snapshot', async (req, res) => {
 
   try {
     // Run in parallel
-    const [stable, dexVol, prices, funding, oi, liq] = await Promise.all([
+    const [stable, dexVol, prices, funding, oi, liq, cexBtc, solEtf] = await Promise.all([
       fetchStablecoins(),
       fetchDefiLlamaDexVolume(),
       fetchCoingeckoPrices(symbols),
       fetchBinanceFundingRates(symbols),
       fetchBinanceOpenInterest(symbols),
       fetchBinanceLiquidations(symbols),
+      fetchExchangeBtcBalances(),
+      fetchSolEtf(),
     ]);
 
     // Minimal “global” aggregation (MVP): Binance-only for OI / liquidations.
@@ -68,10 +72,13 @@ app.get('/api/snapshot', async (req, res) => {
       fundingRates: funding,
       openInterest: oi,
       liquidations: liq,
+      exchangeBtcBalances: cexBtc,
+      solEtf,
       notes: {
         oiCoverage: 'MVP uses Binance Futures open interest only (not full global). Next: add Bybit/OKX/Deribit aggregation.',
-        liquidationCoverage: 'MVP uses Binance Futures liquidation stream approximation (not full global).',
-        etf: 'ETF flows require a dedicated source; not wired in MVP yet.',
+        liquidationCoverage: 'Liquidations are optional; if blocked by exchange (401), we mark as unavailable.',
+        etf: 'ETF flows require a dedicated source (CoinGlass recommended).',
+        cexBtcBalances: 'Exchange BTC balances require dedicated source (CoinGlass recommended).',
       },
     };
 

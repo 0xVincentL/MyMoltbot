@@ -54,6 +54,10 @@ function upsertDailySnapshot(snapshot) {
     // liquidation sample
     btcLiqUsdEst: snapshot.liquidations?.BTC?.recentNotionalUsd_est ?? null,
     ethLiqUsdEst: snapshot.liquidations?.ETH?.recentNotionalUsd_est ?? null,
+
+    // placeholders for future CoinGlass integration
+    exchangeBtcBalancesAvailable: snapshot.exchangeBtcBalances?.available ?? false,
+    solEtfAvailable: snapshot.solEtf?.available ?? false,
   };
 
   const idx = rows.findIndex((r) => r.day === key);

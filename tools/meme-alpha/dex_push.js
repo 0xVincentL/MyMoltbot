@@ -25,7 +25,8 @@ const CHAINS = String(getArg('--chains', process.env.CHAINS || 'solana'))
   .filter(Boolean);
 
 const LIMIT_TOKENS = Number(getArg('--limit', '60'));
-const COOLDOWN_MIN = Number(getArg('--cooldown-min', '30'));
+const COOLDOWN_MIN = Number(getArg('--cooldown-min', '30')); // legacy/optional
+const ONCE_PER_DAY = String(getArg('--once-per-day', process.env.ONCE_PER_DAY || 'true')).toLowerCase();
 
 // Thresholds (tuneable)
 const MIN_LIQ_USD = Number(getArg('--min-liq', '30000'));
@@ -52,7 +53,8 @@ function loadState() {
     return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
   } catch {
     return {
-      sentPairs: {}, // pairAddress -> lastSentMs
+      // pairKey -> { lastSentMs, lastSentDay } OR legacy number(ms)
+      sentPairs: {},
       lastRunMs: 0,
     };
   }
@@ -171,6 +173,8 @@ async function main() {
   const state = loadState();
   const now = Date.now();
   const cooldownMs = COOLDOWN_MIN * 60_000;
+  const today = new Date(now).toISOString().slice(0, 10); // UTC YYYY-MM-DD
+  const oncePerDay = (ONCE_PER_DAY === '1' || ONCE_PER_DAY === 'true' || ONCE_PER_DAY === 'yes');
 
   // Sources: latest token profiles + boosts top/latest
   const [latestProfiles, boostsTop, boostsLatest] = await Promise.all([
@@ -226,8 +230,14 @@ async function main() {
 
         const pairAddr = best.pairAddress;
         const pairKey = `${chainId}:${pairAddr}`;
-        const lastSent = state.sentPairs[pairKey] ?? 0;
-        if (now - lastSent < cooldownMs) continue;
+
+        const rec = state.sentPairs?.[pairKey];
+        const lastSentMs = (typeof rec === 'number') ? rec : (rec?.lastSentMs ?? 0);
+        const lastSentDay = (typeof rec === 'object' && rec) ? (rec.lastSentDay ?? null) : null;
+
+        if (oncePerDay && lastSentDay === today) continue;
+        // Optional legacy cooldown (still useful to avoid rapid repeats if ONCE_PER_DAY disabled)
+        if (!oncePerDay && now - lastSentMs < cooldownMs) continue;
 
         const boosted = boostedSet.has(`${chainId}:${t}`);
         const scored = scorePair(best, boosted);
@@ -249,7 +259,7 @@ async function main() {
             text: buildAlert(best, scored),
           };
           alerts.push(alert);
-          state.sentPairs[pairKey] = now;
+          state.sentPairs[pairKey] = { lastSentMs: now, lastSentDay: today };
         }
       } catch (e) {
         // ignore individual token failures
@@ -275,6 +285,16 @@ async function main() {
     const curScore = Number(a.score ?? 0);
     if (curScore > prevScore) uniq.set(k, a);
   }
+
+  // Prune very old state entries to keep the file small.
+  // Keep the last ~14 days of keys.
+  try {
+    const cutoffMs = now - 14 * 24 * 60 * 60 * 1000;
+    for (const [k, v] of Object.entries(state.sentPairs || {})) {
+      const ms = (typeof v === 'number') ? v : (v?.lastSentMs ?? 0);
+      if (ms && ms < cutoffMs) delete state.sentPairs[k];
+    }
+  } catch {}
 
   const sorted = Array.from(uniq.values()).sort((a, b) => {
     const as = Number(a.score ?? 0);

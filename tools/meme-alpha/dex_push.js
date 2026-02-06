@@ -136,22 +136,21 @@ function buildAlert(p, scored) {
   const base = p?.baseToken ?? {};
   const token = base.address;
   const g = gmgnUrl(token);
-  const onlyGmgn = String(getArg('--only-gmgn', process.env.ONLY_GMGN || 'true')).toLowerCase();
+  const onlyGmgn = String(getArg('--only-gmgn', process.env.ONLY_GMGN || '')).toLowerCase();
 
-  // If requested, emit only the GMGN link (clean Telegram UX).
+  // If requested, emit only the GMGN link.
   if (onlyGmgn === '1' || onlyGmgn === 'true' || onlyGmgn === 'yes') {
     return g || '';
   }
 
   const sym = base.symbol ?? '???';
   const name = base.name ?? '';
-  const url = p?.url;
   const m = scored.metrics;
 
   const lines = [];
   lines.push(`Meme alpha (Dexscreener) 评分 ${scored.score}/100`);
   lines.push(`${sym}${name ? ` (${name})` : ''}`);
-  lines.push(url);
+  // Replace Dexscreener link with GMGN link (Vincent preference)
   if (g) lines.push(g);
   lines.push(`liq ${fmtMoney(m.liq)} | vol5 ${fmtMoney(m.vol5)} | vol1 ${fmtMoney(m.vol1)} | tx5 ${m.tx5}`);
   if (Number.isFinite(m.fdvL) && m.fdvL !== Infinity) lines.push(`FDV ${fmtMoney(m.fdv)} | FDV/L ${m.fdvL.toFixed(1)}`);

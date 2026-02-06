@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meme Alpha (Dexscreener)</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:#0b0d12; color:#e7eaf0; margin:0;}
+    header{padding:16px 20px; border-bottom:1px solid #1f2430; display:flex; align-items:center; justify-content:space-between;}
+    .wrap{max-width:1100px; margin:0 auto; padding:18px 20px;}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    button{background:#2d6cff; color:white; border:0; padding:10px 12px; border-radius:10px; cursor:pointer; font-weight:600;}
+    button.secondary{background:#20283a;}
+    .muted{color:#9aa4b2; font-size:13px;}
+    .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-top:12px;}
+    @media (max-width: 900px){.grid{grid-template-columns:1fr;}}
+    .card{background:#0f141f; border:1px solid #1f2430; border-radius:14px; padding:14px;}
+    .card h3{margin:0 0 6px 0; font-size:14px; color:#cdd6e5; font-weight:700;}
+    .kpi{font-size:26px; font-weight:800;}
+    .list{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
+    .item{background:#0f141f; border:1px solid #1f2430; border-radius:14px; padding:14px;}
+    .item a{color:#8ab4ff; text-decoration:none;}
+    .item .title{font-size:16px; font-weight:800; margin-bottom:6px;}
+    .pill{display:inline-block; padding:3px 8px; border-radius:999px; font-size:12px; border:1px solid #2b3342; color:#c8d1e0; margin-right:6px;}
+    .flags{margin-top:8px;}
+    pre{white-space:pre-wrap; word-break:break-word; background:#0b0d12; border:1px solid #1f2430; border-radius:12px; padding:10px; color:#cdd6e5;}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div style="font-weight:900">Meme Alpha</div>
+      <div class="muted">Dexscreener-only • Solana • realtime alerts happen in Telegram; this page is for quick manual scan + review</div>
+    </div>
+    <div class="row">
+      <button id="scan">Scan (dry-run)</button>
+      <button id="save" class="secondary">Scan + Save</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card">
+        <h3>Last saved snapshot</h3>
+        <div class="kpi" id="lastWhen">-</div>
+        <div class="muted" id="lastCount">-</div>
+      </div>
+      <div class="card">
+        <h3>Cooldown state</h3>
+        <div class="kpi" id="sentPairs">-</div>
+        <div class="muted">pairs on cooldown</div>
+      </div>
+      <div class="card">
+        <h3>Status</h3>
+        <div class="kpi" id="status">ready</div>
+        <div class="muted" id="status2">—</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px" class="row">
+      <div class="muted">Tips: thresholds and cooldown live in <code>tools/meme-alpha/dex_push.js</code>. This app does not send Telegram messages.</div>
+    </div>
+
+    <div class="list" id="alerts"></div>
+
+    <div style="margin-top:14px">
+      <div class="muted">Debug</div>
+      <pre id="debug"></pre>
+    </div>
+  </div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  const fmtTs = (ms) => ms ? new Date(ms).toLocaleString() : '-';
+  const money = (x) => {
+    if (x === null || x === undefined || Number.isNaN(Number(x))) return '-';
+    x = Number(x);
+    const abs = Math.abs(x);
+    if (abs >= 1e9) return `$${(x/1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `$${(x/1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `$${(x/1e3).toFixed(2)}K`;
+    return `$${x.toFixed(0)}`;
+  };
+
+  async function api(path, opts={}){
+    const r = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+    return j;
+  }
+
+  function renderAlerts(alerts){
+    const box = el('alerts');
+    box.innerHTML = '';
+    if(!alerts || alerts.length===0){
+      box.innerHTML = '<div class="item"><div class="muted">No alerts in this scan.</div></div>';
+      return;
+    }
+    for(const a of alerts){
+      const m = a.metrics || {};
+      const flags = (a.reasons || []).join(', ');
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `
+        <div class="title">${a.symbol || ''} <span class="muted">${a.name || ''}</span></div>
+        <div class="row">
+          <span class="pill">score ${a.score}</span>
+          <span class="pill">liq ${money(m.liq)}</span>
+          <span class="pill">vol5 ${money(m.vol5)}</span>
+          <span class="pill">vol1 ${money(m.vol1)}</span>
+          <span class="pill">tx5 ${m.tx5 ?? '-'}</span>
+          <span class="pill">fdv/liq ${(m.fdvL!==undefined && m.fdvL!==null) ? Number(m.fdvL).toFixed(1) : '-'}</span>
+        </div>
+        <div style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noreferrer">Dexscreener</a> &nbsp; <span class="muted">token: ${a.tokenAddress}</span></div>
+        ${flags ? `<div class="flags muted">flags: ${flags}</div>` : ''}
+      `;
+      box.appendChild(div);
+    }
+  }
+
+  async function refreshLatest(){
+    const j = await api('/api/latest');
+    el('lastWhen').textContent = fmtTs(j.last?.whenMs);
+    el('lastCount').textContent = `${(j.last?.alerts||[]).length} alerts saved`;
+    el('sentPairs').textContent = j.stateSummary?.sentPairs ?? '-';
+    renderAlerts(j.last?.alerts || []);
+    el('debug').textContent = JSON.stringify(j, null, 2);
+  }
+
+  el('scan').onclick = async () => {
+    el('status').textContent = 'scanning…';
+    try{
+      const j = await api('/api/scan', { method: 'POST', body: '{}' });
+      el('status').textContent = 'ok';
+      el('status2').textContent = `scan @ ${fmtTs(j.whenMs)}`;
+      renderAlerts(j.alerts);
+      el('debug').textContent = JSON.stringify(j, null, 2);
+    }catch(e){
+      el('status').textContent = 'error';
+      el('status2').textContent = String(e.message||e);
+    }
+  };
+
+  el('save').onclick = async () => {
+    el('status').textContent = 'scanning…';
+    try{
+      const j = await api('/api/scan/save', { method: 'POST', body: '{}' });
+      el('status').textContent = 'saved';
+      el('status2').textContent = `saved @ ${fmtTs(j.whenMs)}`;
+      await refreshLatest();
+    }catch(e){
+      el('status').textContent = 'error';
+      el('status2').textContent = String(e.message||e);
+    }
+  };
+
+  refreshLatest().catch(()=>{});
+</script>
+</body>
+</html>

@@ -20,6 +20,7 @@
     .warn { color:#fbbf24; font-size: 12px; }
     .ok { color:#34d399; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -38,6 +39,16 @@
       <div class="card" id="macro"></div>
       <div class="card" id="derivs"></div>
       <div class="card" id="onchain"></div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div style="font-weight:700;">过去15天趋势图（每日快照）</div>
+          <div class="sub" id="histStatus"></div>
+        </div>
+        <canvas id="chart" height="120"></canvas>
+        <div class="sub" style="margin-top:8px; color:#aaa;">
+          图表数据来自 /api/history（每天按 Asia/Shanghai 日期写入一行）。
+        </div>
+      </div>
     </div>
   </div>
 
@@ -49,6 +60,66 @@
     return `<div style="font-weight:700; margin-bottom:6px;">${title}</div>` + items.map(([k,v])=>`<div class="row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
   }
 
+  let chart = null;
+
+  async function refreshHistory() {
+    try {
+      el('histStatus').textContent = 'loading history...';
+      const r = await fetch('/api/history?days=15');
+      const j = await r.json();
+      if (!j.ok) throw new Error('history error');
+      const rows = j.rows || [];
+      const labels = rows.map(r => r.day);
+
+      const ds = (label, data, color) => ({
+        label,
+        data,
+        borderColor: color,
+        backgroundColor: color,
+        tension: 0.25,
+        pointRadius: 2,
+        yAxisID: 'y',
+      });
+
+      const btc = rows.map(r => r.btc);
+      const stable = rows.map(r => r.stableMcapUsd);
+      const dex = rows.map(r => r.dexVol24hUsd);
+      const oi = rows.map(r => (r.btcOiUsd && r.ethOiUsd) ? (r.btcOiUsd + r.ethOiUsd) : null);
+
+      const data = {
+        labels,
+        datasets: [
+          ds('BTC Price (USD)', btc, '#60a5fa'),
+          ds('Stablecoin Mcap (USD)', stable, '#34d399'),
+          ds('DEX Vol 24h (USD)', dex, '#fbbf24'),
+          ds('OI Notional (BTC+ETH, USD, Binance MVP)', oi, '#f472b6'),
+        ],
+      };
+
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data,
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#ddd' } },
+            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw ?? '-'}` } },
+          },
+          scales: {
+            x: { ticks: { color: '#aaa' }, grid: { color: '#222' } },
+            y: { ticks: { color: '#aaa' }, grid: { color: '#222' } },
+          },
+        }
+      });
+      el('histStatus').textContent = `history ok (${rows.length} days)`;
+    } catch (e) {
+      el('histStatus').textContent = 'history error';
+    }
+  }
+
   async function refresh() {
     el('status').textContent = 'loading...';
     try {
@@ -58,6 +129,7 @@
 
       el('asof').textContent = 'asOf: ' + j.asOf;
       el('status').textContent = 'ok';
+      await refreshHistory();
 
       // prices
       const p = j.prices || {};

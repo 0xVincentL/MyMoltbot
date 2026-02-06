@@ -12,6 +12,8 @@ const {
   fetchCoingeckoPrices,
 } = require('./sources');
 
+const { loadHistory, upsertDailySnapshot } = require('./storage');
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -24,6 +26,12 @@ app.get('/api/health', (_req, res) => {
 
 const SnapshotQuery = z.object({
   symbols: z.string().optional(), // comma-separated: BTC,ETH
+});
+
+app.get('/api/history', (req, res) => {
+  const days = Math.max(1, Math.min(60, Number(req.query.days || 15)));
+  const rows = loadHistory();
+  res.json({ ok: true, days, rows: rows.slice(-days) });
 });
 
 app.get('/api/snapshot', async (req, res) => {
@@ -66,6 +74,10 @@ app.get('/api/snapshot', async (req, res) => {
         etf: 'ETF flows require a dedicated source; not wired in MVP yet.',
       },
     };
+
+    // persist daily snapshot for charts (15d)
+    const stored = upsertDailySnapshot(payload);
+    payload.storedDaily = stored;
 
     res.json(payload);
   } catch (e) {

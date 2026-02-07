@@ -33,7 +33,10 @@ function pickRpcUrl() {
 const THRESHOLD_SOL = Number(getArg('--threshold-sol', '100'));
 const LIMIT = Math.max(5, Math.min(200, Number(getArg('--limit', '40'))));
 
-const ROOT = path.resolve(__dirname, '..', '..');
+// NOTE: This script lives under MyMoltbot/, but the Clawdbot dashboard expects
+// memory/ to be at the workspace root (/home/codespace/clawd). So we anchor ROOT
+// three levels up from tools/smart-money/.
+const ROOT = path.resolve(__dirname, '..', '..', '..');
 const WALLETS_PATH = path.resolve(__dirname, 'wallets.json');
 
 const MEM_DIR = path.join(ROOT, 'memory', 'smart-money');
